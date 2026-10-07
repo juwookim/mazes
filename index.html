@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<title>실타래 미로</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&family=IBM+Plex+Sans+KR:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: graph-paper notebook page; one maze sheet, stats strip above, controls below. */
+:root {
+  --paper: #eef2f4;
+  --sheet: #f8fafb;
+  --grid: #d5e0e8;
+  --ink: #1d2935;
+  --muted: #5d6f80;
+  --thread: #d2313f;
+  --goal: #1d8a5a;
+  --line: #c3d1dc;
+  --font-display: "Gaegu", "Comic Sans MS", cursive;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10161d; --sheet: #151d26; --grid: #1f2b37; --ink: #d9e3ec;
+    --muted: #8a9cad; --thread: #ff5b66; --goal: #3ccb8a; --line: #2b3a48;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10161d; --sheet: #151d26; --grid: #1f2b37; --ink: #d9e3ec;
+  --muted: #8a9cad; --thread: #ff5b66; --goal: #3ccb8a; --line: #2b3a48;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 {
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  line-height: 1;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+h1 span { color: var(--thread); }
+.sub { color: var(--muted); margin: 0; font-size: 0.9rem; }
+
+.levels { display: flex; gap: 6px; flex-wrap: wrap; }
+.levels button, .actions button {
+  font: 600 0.88rem/1 var(--font-body);
+  color: var(--ink);
+  background: transparent;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.levels button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.levels button small { font: 500 0.72rem var(--font-mono); opacity: 0.7; margin-left: 4px; }
+button:hover { border-color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--thread); outline-offset: 2px; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+}
+.stat { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.stat + .stat { border-left: 1px dashed var(--line); }
+.stat label { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.stat output { font: 500 1.25rem var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.board {
+  position: relative;
+  background: var(--sheet);
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  padding: 10px;
+  touch-action: none;
+}
+canvas { display: block; width: 100%; height: auto; }
+
+.win {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: color-mix(in srgb, var(--sheet) 88%, transparent);
+  text-align: center;
+  padding: 16px;
+}
+.win h2 { font-family: var(--font-display); font-size: 3rem; margin: 0; line-height: 1; color: var(--goal); }
+.win p { margin: 0; color: var(--muted); }
+.win p b { color: var(--ink); font-family: var(--font-mono); font-weight: 500; }
+.win button {
+  margin-top: 8px;
+  font: 600 0.95rem var(--font-body);
+  background: var(--ink); color: var(--sheet);
+  border: 0; border-radius: 6px; padding: 11px 18px; cursor: pointer;
+}
+
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.actions .spacer { flex: 1; }
+.hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+kbd {
+  font: 500 0.78rem var(--font-mono);
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+  padding: 1px 5px; background: var(--sheet);
+}
+
+.pad { display: none; grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(2, 56px); gap: 6px; justify-content: center; }
+.pad button {
+  font-size: 1.3rem; color: var(--ink); background: var(--sheet);
+  border: 1.5px solid var(--line); border-radius: 10px; cursor: pointer;
+}
+.pad button:active { background: var(--grid); }
+.pad .up { grid-column: 2; }
+.pad .left { grid-column: 1; grid-row: 2; }
+.pad .down { grid-column: 2; grid-row: 2; }
+.pad .right { grid-column: 3; grid-row: 2; }
+@media (pointer: coarse) { .pad { display: grid; } .kbd-hint { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>실타래 <span>미로</span></h1>
+      <p class="sub">빨간 실을 풀며 출구까지. 왔던 길로 돌아가면 실이 감겨요.</p>
+    </div>
+  </header>
+
+  <div class="levels" role="group" aria-label="난이도">
+    <button id="lv-0" data-size="10">쉬움<small>10×10</small></button>
+    <button id="lv-1" data-size="18">보통<small>18×18</small></button>
+    <button id="lv-2" data-size="28">어려움<small>28×28</small></button>
+    <button id="lv-3" data-size="40">미궁<small>40×40</small></button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><label for="t">시간</label><output id="t">0:00.0</output></div>
+    <div class="stat"><label for="m">이동</label><output id="m">0</output></div>
+    <div class="stat"><label for="b">최고 기록</label><output id="b">—</output></div>
+  </div>
+
+  <div class="board" id="board">
+    <canvas id="cv" aria-label="미로 판" role="img"></canvas>
+    <div class="win" id="win" hidden>
+      <h2>탈출!</h2>
+      <p><b id="win-time"></b> · <b id="win-moves"></b>걸음</p>
+      <p id="win-note"></p>
+      <button id="again">새 미로</button>
+    </div>
+  </div>
+
+  <div class="pad" aria-label="방향 버튼">
+    <button class="up" id="pad-up" data-dir="up" aria-label="위">▲</button>
+    <button class="left" id="pad-left" data-dir="left" aria-label="왼쪽">◀</button>
+    <button class="down" id="pad-down" data-dir="down" aria-label="아래">▼</button>
+    <button class="right" id="pad-right" data-dir="right" aria-label="오른쪽">▶</button>
+  </div>
+
+  <div class="actions">
+    <button id="new">새 미로</button>
+    <button id="restart">처음부터</button>
+    <button id="solve">길 보기</button>
+    <span class="spacer"></span>
+    <p class="hint kbd-hint"><kbd>←↑↓→</kbd> / <kbd>WASD</kbd> 이동 · <kbd>N</kbd> 새 미로 · <kbd>H</kbd> 길 보기</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const N = 1, E = 2, S = 4, W = 8;
+  const DIRS = {
+    up:    { bit: N, dx: 0,  dy: -1, opp: S },
+    right: { bit: E, dx: 1,  dy: 0,  opp: W },
+    down:  { bit: S, dx: 0,  dy: 1,  opp: N },
+    left:  { bit: W, dx: -1, dy: 0,  opp: E },
+  };
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const levelBtns = [...document.querySelectorAll('.levels button')];
+
+  let size = 10, walls, player, shown, trail, moves, startTime, elapsed, running, won, showPath, cellPx;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  // Recursive backtracker (iterative). walls[y][x] holds the set of OPEN sides.
+  function generate(n) {
+    const g = Array.from({ length: n }, () => new Array(n).fill(0));
+    const seen = Array.from({ length: n }, () => new Array(n).fill(false));
+    const stack = [[0, 0]];
+    seen[0][0] = true;
+    const order = Object.values(DIRS);
+    while (stack.length) {
+      const [x, y] = stack[stack.length - 1];
+      const opts = order.filter(d => {
+        const nx = x + d.dx, ny = y + d.dy;
+        return nx >= 0 && ny >= 0 && nx < n && ny < n && !seen[ny][nx];
+      });
+      if (!opts.length) { stack.pop(); continue; }
+      const d = opts[Math.floor(Math.random() * opts.length)];
+      const nx = x + d.dx, ny = y + d.dy;
+      g[y][x] |= d.bit;
+      g[ny][nx] |= d.opp;
+      seen[ny][nx] = true;
+      stack.push([nx, ny]);
+    }
+    return g;
+  }
+
+  function solveFrom(sx, sy) {
+    const prev = new Map();
+    const key = (x, y) => y * size + x;
+    const q = [[sx, sy]];
+    prev.set(key(sx, sy), null);
+    while (q.length) {
+      const [x, y] = q.shift();
+      if (x === size - 1 && y === size - 1) break;
+      for (const d of Object.values(DIRS)) {
+        if (!(walls[y][x] & d.bit)) continue;
+        const nx = x + d.dx, ny = y + d.dy, k = key(nx, ny);
+        if (prev.has(k)) continue;
+        prev.set(k, [x, y]);
+        q.push([nx, ny]);
+      }
+    }
+    const path = [];
+    let cur = [size - 1, size - 1];
+    while (cur) { path.push(cur); cur = prev.get(key(cur[0], cur[1])); }
+    return path.reverse();
+  }
+
+  function newMaze(n = size) {
+    size = n;
+    walls = generate(size);
+    restart();
+    levelBtns.forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.size === size)));
+    store.set('maze-size', String(size));
+    showBest();
+  }
+
+  function restart() {
+    player = { x: 0, y: 0 };
+    shown = { x: 0, y: 0 };
+    trail = [[0, 0]];
+    moves = 0; elapsed = 0; running = false; won = false; showPath = false;
+    $('solve').textContent = '길 보기';
+    $('win').hidden = true;
+    updateStats();
+    resize();
+  }
+
+  function move(dir) {
+    if (won) return;
+    const d = DIRS[dir];
+    if (!(walls[player.y][player.x] & d.bit)) return;
+    if (!running) { running = true; startTime = performance.now(); }
+    player.x += d.dx; player.y += d.dy;
+    moves++;
+    const back = trail[trail.length - 2];
+    if (back && back[0] === player.x && back[1] === player.y) trail.pop();
+    else trail.push([player.x, player.y]);
+    if (reduceMotion) { shown.x = player.x; shown.y = player.y; }
+    if (player.x === size - 1 && player.y === size - 1) finish();
+    updateStats();
+  }
+
+  function finish() {
+    won = true; running = false;
+    elapsed = performance.now() - startTime;
+    const key = 'maze-best-' + size;
+    const prevBest = parseFloat(store.get(key));
+    let note = '';
+    if (!prevBest || elapsed < prevBest) {
+      store.set(key, String(elapsed));
+      note = prevBest ? `최고 기록 경신! (이전 ${fmt(prevBest)})` : '첫 기록이에요.';
+    } else {
+      note = `최고 기록 ${fmt(prevBest)}`;
+    }
+    const optimal = solveFrom(0, 0).length - 1;
+    note += ` · 최단 경로 ${optimal}걸음`;
+    $('win-time').textContent = fmt(elapsed);
+    $('win-moves').textContent = moves;
+    $('win-note').textContent = note;
+    $('win').hidden = false;
+    showBest();
+    $('again').focus();
+  }
+
+  function fmt(ms) {
+    const s = ms / 1000;
+    return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+  }
+  function showBest() {
+    const b = parseFloat(store.get('maze-best-' + size));
+    $('b').textContent = b ? fmt(b) : '—';
+  }
+  function updateStats() { $('m').textContent = moves; }
+
+  // Rendering
+  let colors = {};
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of ['sheet', 'grid', 'ink', 'thread', 'goal', 'muted']) colors[k] = cs.getPropertyValue('--' + k).trim();
+  }
+  readColors();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function resize() {
+    const box = $('board').clientWidth - 20 - 3;
+    const avail = Math.min(box, window.innerHeight * 0.68, 640);
+    cellPx = Math.max(6, Math.floor(avail / size));
+    const px = cellPx * size + 4;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = px * dpr; cv.height = px * dpr;
+    cv.style.width = px + 'px'; cv.style.height = px + 'px';
+    cv.style.margin = '0 auto';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function draw() {
+    const c = cellPx, o = 2, n = size;
+    const full = c * n + 4;
+    ctx.fillStyle = colors.sheet;
+    ctx.fillRect(0, 0, full, full);
+
+    // graph paper
+    ctx.strokeStyle = colors.grid; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i < n; i++) {
+      ctx.moveTo(o + i * c + 0.5, o); ctx.lineTo(o + i * c + 0.5, o + n * c);
+      ctx.moveTo(o, o + i * c + 0.5); ctx.lineTo(o + n * c, o + i * c + 0.5);
+    }
+    ctx.stroke();
+
+    // goal cell
+    ctx.fillStyle = colors.goal;
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(o + (n - 1) * c, o + (n - 1) * c, c, c);
+    ctx.globalAlpha = 1;
+    drawFlag(o + (n - 1) * c, o + (n - 1) * c, c);
+
+    // solution
+    if (showPath) {
+      const path = solveFrom(player.x, player.y);
+      ctx.strokeStyle = colors.goal; ctx.lineWidth = Math.max(1.5, c * 0.12);
+      ctx.setLineDash([c * 0.25, c * 0.25]); ctx.lineCap = 'round';
+      ctx.beginPath();
+      path.forEach(([x, y], i) => {
+        const px = o + x * c + c / 2, py = o + y * c + c / 2;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // thread
+    ctx.strokeStyle = colors.thread; ctx.lineWidth = Math.max(2, c * 0.22);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    trail.forEach(([x, y], i) => {
+      const last = i === trail.length - 1;
+      const px = o + (last ? shown.x : x) * c + c / 2, py = o + (last ? shown.y : y) * c + c / 2;
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    });
+    ctx.stroke();
+
+    // walls
+    ctx.strokeStyle = colors.ink; ctx.lineWidth = Math.max(1.5, Math.min(3, c * 0.12)); ctx.lineCap = 'square';
+    ctx.beginPath();
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const w = walls[y][x], X = o + x * c, Y = o + y * c;
+      if (!(w & N) && !(x === 0 && y === 0)) { ctx.moveTo(X, Y); ctx.lineTo(X + c, Y); }
+      if (!(w & W)) { ctx.moveTo(X, Y); ctx.lineTo(X, Y + c); }
+      if (y === n - 1 && !(w & S)) { ctx.moveTo(X, Y + c); ctx.lineTo(X + c, Y + c); }
+      if (x === n - 1 && !(w & E) && !(y === n - 1)) { ctx.moveTo(X + c, Y); ctx.lineTo(X + c, Y + c); }
+    }
+    ctx.stroke();
+
+    // spool (player)
+    const px = o + shown.x * c + c / 2, py = o + shown.y * c + c / 2, r = Math.max(3, c * 0.32);
+    ctx.fillStyle = colors.thread;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+    if (c >= 14) {
+      ctx.strokeStyle = colors.sheet; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(px, py, r * 0.55, 0.3, Math.PI * 1.6); ctx.stroke();
+    }
+  }
+
+  function drawFlag(X, Y, c) {
+    if (c < 12) return;
+    ctx.strokeStyle = colors.goal; ctx.fillStyle = colors.goal; ctx.lineWidth = 1.5;
+    const bx = X + c * 0.35, top = Y + c * 0.2, bot = Y + c * 0.82;
+    ctx.beginPath(); ctx.moveTo(bx, bot); ctx.lineTo(bx, top); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx, top); ctx.lineTo(bx + c * 0.38, top + c * 0.14); ctx.lineTo(bx, top + c * 0.28); ctx.fill();
+  }
+
+  function tick(now) {
+    const k = 0.35;
+    shown.x += (player.x - shown.x) * k;
+    shown.y += (player.y - shown.y) * k;
+    if (Math.abs(player.x - shown.x) < 0.01) shown.x = player.x;
+    if (Math.abs(player.y - shown.y) < 0.01) shown.y = player.y;
+    if (running) $('t').textContent = fmt(now - startTime);
+    else if (!won && moves === 0) $('t').textContent = fmt(0);
+    else if (won) $('t').textContent = fmt(elapsed);
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  // Input
+  const keyMap = {
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+    w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right',
+  };
+  window.addEventListener('keydown', e => {
+    if (keyMap[e.key]) { e.preventDefault(); move(keyMap[e.key]); return; }
+    if (e.key === 'n' || e.key === 'N') newMaze();
+    if (e.key === 'h' || e.key === 'H') toggleSolve();
+  });
+
+  // Swipe / drag on the board: each cell-length of drag moves one step.
+  let drag = null;
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const step = Math.max(14, cellPx * (cv.getBoundingClientRect().width / (cellPx * size + 4)));
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) >= step && Math.abs(dx) > Math.abs(dy)) { move(dx > 0 ? 'right' : 'left'); drag.x += Math.sign(dx) * step; drag.y = e.clientY; }
+    else if (Math.abs(dy) >= step) { move(dy > 0 ? 'down' : 'up'); drag.y += Math.sign(dy) * step; drag.x = e.clientX; }
+  });
+  const endDrag = () => { drag = null; };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+
+  // D-pad with hold-to-repeat
+  document.querySelectorAll('.pad button').forEach(b => {
+    let timer;
+    const stop = () => clearInterval(timer);
+    b.addEventListener('pointerdown', e => { e.preventDefault(); move(b.dataset.dir); stop(); timer = setInterval(() => move(b.dataset.dir), 140); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stop));
+  });
+
+  function toggleSolve() {
+    if (won) return;
+    showPath = !showPath;
+    $('solve').textContent = showPath ? '길 숨기기' : '길 보기';
+  }
+
+  levelBtns.forEach(b => b.addEventListener('click', () => newMaze(+b.dataset.size)));
+  $('new').addEventListener('click', () => newMaze());
+  $('again').addEventListener('click', () => newMaze());
+  $('restart').addEventListener('click', restart);
+  $('solve').addEventListener('click', toggleSolve);
+  window.addEventListener('resize', resize);
+
+  const saved = parseInt(store.get('maze-size'), 10);
+  newMaze([10, 18, 28, 40].includes(saved) ? saved : 18);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
